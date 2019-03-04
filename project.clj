@@ -1,4 +1,4 @@
-(defproject cljang "0.4.3-SNAPSHOT"
+(defproject cljang "0.4.3"
   :description "Clang for Clojure"
   :url "https://github.com/lvh/cljang"
   :license {:name "EPL-2.0"
