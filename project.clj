@@ -7,8 +7,8 @@
                  [org.bytedeco.javacpp-presets/llvm "7.0.1-1.4.4"]
                  [org.bytedeco.javacpp-presets/llvm-platform "7.0.1-1.4.4"]
                  [camel-snake-kebab "0.4.0"]]
-  :deploy-repositories [["releases" :clojars]
-                        ["snapshots" :clojars]]
+  :repositories [["releases" :clojars]
+                 ["snapshots" :clojars]]
   :main ^:skip-aot cljang.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})
