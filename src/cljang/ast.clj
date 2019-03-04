@@ -1,8 +1,9 @@
 (ns cljang.ast
-  (:require [clojure.datafy :refer [datafy]]
+  (:require [clojure.datafy :as datafy]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [camel-snake-kebab.core :as csk])
+            [camel-snake-kebab.core :as csk]
+            [clojure.zip :as zip])
   (:import (org.bytedeco.javacpp clang BytePointer IntPointer PointerPointer)))
 
 ;; https://github.com/bytedeco/javacpp-presets/blob/master/llvm/samples/src/main/java/org/bytedeco/javacpp/samples/clang/ClangASTVisitorExample.java
@@ -33,6 +34,12 @@
   [cursor]
   (-> cursor clang/clang_getCursorType .kind clang/clang_getTypeKindSpelling .getString))
 
+(defn cursor-details
+  [cursor]
+  (->> (for [v [#'cursor #'cursor-kind #'cursor-type #'cursor-type-kind]]
+         [(keyword "clang" (-> v meta :name)) (v cursor)])
+       (into {})))
+
 (defn parse
   [path]
   (let [idx (create-index! false true)
@@ -50,10 +57,10 @@
 
 (defn ^:private enum-fields
   [base prefix]
-  (let [underscored-prefix (str (name prefix) "_")]
-    (->> base datafy :members (filter #(-> % key name (str/starts-with? underscored-prefix))) (map val))))
-
-(->> clang datafy :members first val first)
+  (let [underscored-prefix (str (name prefix) "_")
+        is-enum-member? #(-> % key name (str/starts-with? underscored-prefix))
+        members (->> base datafy/datafy :members)]
+    (eduction (filter is-enum-member?) (map val) members)))
 
 (defn ^:private enum-vals->kw
   [base prefix]
@@ -79,15 +86,54 @@
 (defn traverse!
   [f unit]
   (let [root (clang/clang_getTranslationUnitCursor unit)
-        visitor (->visitor f)
         level (org.bytedeco.javacpp.clang$CXClientData. (IntPointer. (int-array 1)))]
-    (clang/clang_visitChildren root visitor level)))
+    (clang/clang_visitChildren root (->visitor f) level)))
+
+(extend-protocol clojure.core.protocols/Datafiable
+  org.bytedeco.javacpp.clang$CXTranslationUnit
+  (datafy [u]
+    ))
+
+(defn unit->data
+  [unit]
+  (let [state (atom [])]
+    (traverse! (fn [cursor parent]
+                 (swap! state conj cursor)
+                 ::recurse)
+               unit)
+    @state))
 
 #_(->> (parse "/home/user/Projects/libsodium/src/libsodium/include/sodium.h")
-       (traverse! (fn [cursor parent]
-                    (println cursor)
-                    (println parent)
-                    ::recurse)))
+       unit->data
+       first
+       (def c))
+
+(#'cursor c)
+(#'cursor-type c)
+
+(#'cursor-kind c)
+(#'cursor-type-kind c)
+
+#_(cursor-details c)
 
 
 #_(->> clang datafy :members (filter #(-> % first)))
+
+
+(defn map-zipper
+  [m]
+  (zip/zipper
+   (fn [x]
+     (or (map? x)
+         (map? (nth x 1))))
+   (fn [x]
+     (seq (if (map? x) x (nth x 1))))
+   (fn [x children]
+     (if (map? x)
+       (into {} children)
+       (assoc x 1 (into {} children))))
+   m))
+
+(-> (map-zipper {})
+    (zip/append-child [:a 1])
+     zip/root)
